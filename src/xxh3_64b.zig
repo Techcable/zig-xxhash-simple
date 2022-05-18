@@ -497,6 +497,16 @@ test "verify xxhash3" {
         .{ 1, 0xB936EBAE24CB01C5, 0xF541B1905037FC39 },
         // 4 -  8
         .{ 6, 0x27B56A84CD2D7325, 0x84589C116AB59AB9 },
+        // 9 - 16
+        .{ 12, 0xA713DAF0DFBB77E7, 0xE7303E1B2336DE0E },
+        // 17 - 32
+        .{ 24, 0xA3FE70BF9D3510EB, 0x850E80FC35BDD690 },
+        // 33 - 64
+        .{ 48, 0x397DA259ECBA1F11, 0xADC2CBAA44ACC616 },
+        // 65 - 96
+        .{ 80, 0xBCDEFBBB2C47C90A, 0xC6DD0CB699532E73 },
+        // 129-240
+        .{ 195, 0xCD94217EE362EC3A, 0xBA68003D370CB3D9 },
     };
     for (test_expected) |data| {
         const len = @intCast(usize, data[0]);
