@@ -10,3 +10,10 @@ pub const HashVariant = enum {
 test "force usgae" {
     _ = xxh3_64b;
 }
+
+test "comptime hash" {
+    comptime {
+        const text = "foo bar baz";
+        _ = xxh3_64b.xxh3_64bits(text);
+    }
+}
