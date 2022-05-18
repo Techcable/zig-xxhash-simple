@@ -185,7 +185,12 @@ fn hash_len_17to128(
         // i believe this is basically hashing from both ends...
         acc +%= mix16B(input.ptr + (16 * i), secret + (32 * i), seed);
         acc +%= mix16B(input.ptr + input.len - (16 * (i + 1)), secret + (32 * i) + 16, seed);
-        i -= 1;
+        // Avoid underflow
+        if (i == 0) {
+            break;
+        } else {
+            i -= 1;
+        }
     }
     return avalanche(acc);
 }
