@@ -1,6 +1,7 @@
 //! The implementation of XXH3_64bits
 //!
 //! See "xxh3-64b-ref.c" in the "clean" C implementation for details.
+// Specific file: https://github.com/easyaspi314/xxhash-clean/blob/master/xxh3-64b-ref.c
 const std = @import("std");
 const assert = std.debug.assert;
 
@@ -9,13 +10,12 @@ pub const HashResult = u64;
 /// The minimum size of secrets
 pub const SECRET_SIZE_MIN = 136;
 const STRIPE_LEN = 64;
-// nb of secret bytes consumed at each accumulation 
+// nb of secret bytes consumed at each accumulation
 const SECRET_CONSUME_RATE = 8;
 const ACC_NB = STRIPE_LEN / @sizeOf(u64);
 comptime {
     if (ACC_NB != 8) unreachable;
 }
-
 
 //
 // public API
@@ -26,7 +26,7 @@ comptime {
 /// NOTE: The length of the secret must be >= SECRET_SIZE_MIN
 pub fn xxh3_64bits_withSecret(input: []const u8, secret: []const u8) HashResult {
     if (input.len <= MIDSIZE_MAX) {
-        return hashShort_64b(input, secret, 0);
+        return hashShort(input, secret, 0);
     } else {
         return hashLong_64b(input, secret);
     }
@@ -39,14 +39,13 @@ pub fn xxh3_64bits(input: []const u8) HashResult {
     return xxh3_64bits_withSeed(input, 0);
 }
 
-
 /// The XXH3-64 seeded hash function.
 ///
 /// input: The data to hash.
 /// seed:    A 64-bit value to seed the hash with.
 pub fn xxh3_64bits_withSeed(input: []const u8, seed: u64) HashResult {
     if (input.len <= MIDSIZE_MAX) {
-        return hashShort(input, kSecret, seed);
+        return hashShort(input, &kSecret, seed);
     } else {
         return hashLong_64b_withSeed(input, seed);
     }
@@ -56,7 +55,7 @@ pub fn xxh3_64bits_withSeed(input: []const u8, seed: u64) HashResult {
 // implementation
 //
 
-/// Mixes up the hash to finalize 
+/// Mixes up the hash to finalize
 fn avalanche(original_hash: u64) HashResult {
     var hash = original_hash;
     hash ^= hash >> 37;
@@ -75,9 +74,9 @@ fn hash_len_0(secret: [*]const u8, seed: u64) HashResult {
     acc +%= PRIME64_1;
     acc ^= read64(secret + 56);
     acc ^= read64(secret + 64);
-    return XXH3_avalanche(acc);
+    return avalanche(acc);
 }
-/// Hashes short keys from 1 to 3 bytes. 
+/// Hashes short keys from 1 to 3 bytes.
 fn hash_len_1to3(
     input: []const u8,
     secret: [*]const u8,
@@ -88,10 +87,7 @@ fn hash_len_1to3(
     const byte2 = if (input.len > 1) input[1] else input[0];
     const byte3 = input[input.len - 1];
 
-    const combined = (@as(u32, byte1) << 16)
-        | (@as(u32, byte2) << 24)
-        | (@as(u32, byte3) << 0)
-        | (@as(u32, input.len) << 8);
+    const combined = (@as(u32, byte1) << 16) | (@as(u32, byte2) << 24) | (@as(u32, byte3) << 0) | (@intCast(u32, input.len) << 8);
     var acc: u64 = (read32(secret) ^ read32(secret + 4));
     acc +%= seed;
     acc ^= @as(u64, combined);
@@ -106,11 +102,11 @@ fn hash_len_4to8(
     orig_seed: u64,
 ) HashResult {
     assert(input.len >= 4 and input.len <= 8);
-    const input_hi: u32 = XXH_read32(input);
-    const input_lo: u32 = XXH_read32(input + (input.len - 4));
+    const input_hi: u32 = read32(input.ptr);
+    const input_lo: u32 = read32(input.ptr + (input.len - 4));
     const input_64 = @as(u64, input_lo) | (@as(u64, input_hi) << 32);
     var acc: u64 = read64(secret + 8) ^ read64(secret + 16);
-    var seed: u64 = orig_seed ^ (@as(u64, swap32(@truncate(u32, seed))) << 32);
+    var seed: u64 = orig_seed ^ (@as(u64, swap32(@truncate(u32, orig_seed))) << 32);
     acc -%= seed;
     acc ^= input_64;
     // rrmxmx mix, skips XXH3_avalanche
@@ -125,11 +121,11 @@ fn hash_len_4to8(
 fn hash_len_9to16(
     input: []const u8,
     secret: [*]const u8,
-    orig_seed: u64,
+    seed: u64,
 ) HashResult {
     assert(input.len >= 9 and input.len <= 16);
-    var input_lo: u64 = XXH_read64(secret+24) ^ XXH_read64(secret+32);
-    var input_hi: u64 = XXH_read64(secret+40) ^ XXH_read64(secret+48);
+    var input_lo: u64 = read64(secret + 24) ^ read64(secret + 32);
+    var input_hi: u64 = read64(secret + 40) ^ read64(secret + 48);
     var acc = input.len;
     input_lo +%= seed;
     input_hi -%= seed;
@@ -176,12 +172,11 @@ fn mix16B(
     return mul128_fold64(lhs, rhs);
 }
 
-
 /// Hashes midsize keys from 9 to 128 bytes.
 fn hash_len_17to128(
     input: []const u8,
     secret: [*]const u8,
-    orig_seed: u64,
+    seed: u64,
 ) HashResult {
     assert(input.len >= 17 and input.len <= 128);
     var i: usize = ((input.len - 1) / 32);
@@ -189,11 +184,7 @@ fn hash_len_17to128(
     while (i >= 0) {
         // i believe this is basically hashing from both ends...
         acc +%= mix16B(input.ptr + (16 * i), secret + (32 * i), seed);
-        acc +%= mix16B(
-            input.ptr + input.len - (16 * (i + 1)),
-            secret + (32 * i) + 16,
-            seed
-        );
+        acc +%= mix16B(input.ptr + input.len - (16 * (i + 1)), secret + (32 * i) + 16, seed);
         i -= 1;
     }
     return avalanche(acc);
@@ -212,7 +203,7 @@ fn hash_len_129to240(
     const MIDSIZE_LASTOFFSET = 7;
 
     var acc: u64 = @as(u64, input.len) *% PRIME64_1;
-    var numRounds: usize = input.len / 16;
+    const nbRounds: usize = input.len / 16;
     {
         var i: usize = 0;
         while (i < 8) {
@@ -224,37 +215,33 @@ fn hash_len_129to240(
     {
         var i: usize = 8;
         while (i < nbRounds) {
-            acc +%= XXH3_mix16B(
+            acc +%= mix16B(
                 input.ptr + (16 * i),
-                secret + (16 * (i - 8)) + XXH3_MIDSIZE_STARTOFFSET,
+                secret + (16 * (i - 8)) + MIDSIZE_STARTOFFSET,
                 seed,
             );
             i += 1;
         }
     }
     // last bytes
-    acc +%= mix16B(
-        input.ptr + input.len - 16,
-        secret + SECRET_SIZE_MIN - MIDSIZE_LASTOFFSET,
-        seed
-    );
+    acc +%= mix16B(input.ptr + input.len - 16, secret + SECRET_SIZE_MIN - MIDSIZE_LASTOFFSET, seed);
     return avalanche(acc);
 }
 
-/// Hashes a short (or "midsize") input, <= 240 bytes 
-fn hash_len_short(
+/// Hashes a short (or "midsize") input, <= 240 bytes
+fn hashShort(
     input: []const u8,
     secret: [*]const u8,
     seed: u64,
 ) HashResult {
     assert(input.len <= 240);
     if (input.len <= 16) {
-        return hash_len_0to16_64b(input, secret, seed);
+        return hash_len_0to16(input, secret, seed);
     }
     if (input.len <= 128) {
         return hash_len_17to128(input, secret, seed);
     }
-    return XXH3_len_129to240_64b(input, secret, seed);
+    return hash_len_129to240(input, secret, seed);
 }
 
 //
@@ -265,14 +252,14 @@ fn hash_len_short(
 ///
 /// According to the C impl, "this is usually written in SIMD code."
 fn accumulate_512_64b(
-    acc: *[ACC_NB]u8,
+    acc: *[ACC_NB]u64,
     input: [*]const u8,
     secret: [*]const u8,
 ) void {
     var i: usize = 0;
     while (i < ACC_NB) {
-        var input_val = read64(input  + (8 * i));
-        acc[i]   +%= input_val;
+        var input_val = read64(input + (8 * i));
+        acc[i] +%= input_val;
         input_val ^= read64(secret + (8 * i));
         acc[i] +%= @truncate(u32, input_val) * (input_val >> 32);
         i += 1;
@@ -283,7 +270,7 @@ fn accumulate_512_64b(
 ///
 /// This is usually written in SIMD code,
 /// as it is usually part of the main loop.
-fn scrambleAcc(acc: *[ACC_NB]u8, secret: [*]const u8) void {
+fn scrambleAcc(acc: *[ACC_NB]u64, secret: [*]const u8) void {
     var i: usize = 0;
     while (i < ACC_NB) {
         acc[i] ^= acc[i] >> 47;
@@ -293,11 +280,11 @@ fn scrambleAcc(acc: *[ACC_NB]u8, secret: [*]const u8) void {
     }
 }
 
-/// Processes a full block. 
+/// Processes a full block.
 ///
 /// Callced "XXH3_accumulate_64b" in C code
 fn accumulate_64b(
-    acc: *[ACC_NB]u8,
+    acc: *[ACC_NB]u64,
     input: [*]const u8,
     secret: [*]const u8,
     nb_stripes: usize,
@@ -309,24 +296,25 @@ fn accumulate_64b(
     }
 }
 
-/// Combines two accumulators with two keys 
-fn mix2Accs(acc: *[2]u8, secret: [*]const u8) u64{
-    return mul128_fold64(
-        acc[0] ^ read64(secret),
-        acc[1] ^ read64(secret + 8)
-    );
+/// Combines two accumulators with two keys
+fn mix2Accs(acc: *const [2]u8, secret: [*]const u8) u64 {
+    return mul128_fold64(acc[0] ^ read64(secret), acc[1] ^ read64(secret + 8));
 }
 
 /// Combines 8 accumulators with keys into 1 finalized 64-bit hash.
 fn mergeAccs(
-    acc: *[ACC_NB]u8,
+    raw_acc: *[ACC_NB]u64,
     key: [*]const u8,
     start: u64,
 ) HashResult {
+    const acc = @ptrCast([*]const u8, raw_acc);
     var result64 = start;
     var i: usize = 0;
     while (i < 4) {
-        result64 +%= XXH3_mix2Accs(acc + (2 * i), key + (16 * i));
+        result64 +%= mix2Accs(
+            @ptrCast(*const [2]u8, acc + (2 * i)),
+            key + (16 * i),
+        );
         i += 1;
     }
     return avalanche(result64);
@@ -356,42 +344,41 @@ fn hashLong_64b(
     {
         var n: usize = 0;
         while (n < nb_blocks) {
-            accumulate_64b(acc, input.ptr + (n * block_len), secret.ptr, nb_rounds);
-            scrambleAcc(acc, secret.ptr + (secret.len - STRIPE_LEN));
+            accumulate_64b(&acc, input.ptr + (n * block_len), secret.ptr, nb_rounds);
+            scrambleAcc(&acc, secret.ptr + (secret.len - STRIPE_LEN));
             n += 1;
-        } 
+        }
     }
     // last partial block
-    accumulate_64b(acc, input.ptr + (nb_blocks * block_len), secret.ptr, nb_stripes);
+    accumulate_64b(&acc, input.ptr + (nb_blocks * block_len), secret.ptr, nb_stripes);
 
     // last stripe
     if (input.len % STRIPE_LEN != 0) {
         const p = input.ptr + (input.len - STRIPE_LEN);
         // Do not align on 8, so that the secret is different from the scrambler
         const XXH_SECRET_LASTACC_START = 7;
-        accumulate_512_64b(acc, p, secret.ptr + (secret.len - STRIPE_LEN - XXH_SECRET_LASTACC_START));
+        accumulate_512_64b(&acc, p, secret.ptr + (secret.len - STRIPE_LEN - XXH_SECRET_LASTACC_START));
     }
 
     const XXH_SECRET_MERGEACCS_START = 11;
 
     // converge into final hash
-    return mergeAccs(acc, secret.ptr + XXH_SECRET_MERGEACCS_START, @as(u64, length) *% PRIME64_1);
+    return mergeAccs(&acc, secret.ptr + XXH_SECRET_MERGEACCS_START, @as(u64, input.len) *% PRIME64_1);
 }
-
 
 /// Hashes a long input, > 240 bytes
-fn XXH3_hashLong_64b_withSeed(input: []const u8, seed: u64) HashResult {
-    var secret: [XXH_SECRET_DEFAULT_SIZE]u8 = undefined;
-    var i = 0;
-
-    while (i < (XXH_SECRET_DEFAULT_SIZE / 16)) {
-        write64(secret.ptr + (16 * i), XXH_read64(kSecret.ptr + (16 * i)) +% seed);
-        write64(secret.ptr + (16 * i) + 8, XXH_read64(kSecret.ptr + (16 * i) + 8) -% seed);
+fn hashLong_64b_withSeed(input: []const u8, seed: u64) HashResult {
+    var secret_buf: [SECRET_DEFAULT_SIZE]u8 = undefined;
+    var i: usize = 0;
+    var secret: [*]u8 = &secret_buf;
+    const std_secret = @as([*]const u8, &kSecret);
+    while (i < (SECRET_DEFAULT_SIZE / 16)) {
+        write64(secret + (16 * i), read64(std_secret + (16 * i)) +% seed);
+        write64(secret + (16 * i) + 8, read64(std_secret + (16 * i) + 8) -% seed);
         i += 1;
     }
-    return hashLong_64b(input, secret);
+    return hashLong_64b(input, &secret_buf);
 }
-
 
 //
 // boring hash constants
@@ -408,7 +395,7 @@ const PRIME64_4: u64 = 0x85EBCA77C2B2AE63;
 const PRIME64_5: u64 = 0x27D4EB2F165667C5;
 
 const SECRET_DEFAULT_SIZE = 192;
-const kSecret: [XXH_SECRET_DEFAULT_SIZE]u8 = .{
+const kSecret: [SECRET_DEFAULT_SIZE]u8 = .{
     0xb8, 0xfe, 0x6c, 0x39, 0x23, 0xa4, 0x4b, 0xbe, 0x7c, 0x01, 0x81, 0x2c, 0xf7, 0x21, 0xad, 0x1c,
     0xde, 0xd4, 0x6d, 0xe9, 0x83, 0x90, 0x97, 0xdb, 0x72, 0x40, 0xa4, 0xa4, 0xb7, 0xb3, 0x67, 0x1f,
     0xcb, 0x79, 0xe6, 0x4e, 0xcc, 0xc0, 0xe5, 0x78, 0x82, 0x5a, 0xd0, 0x7d, 0xcc, 0xff, 0x72, 0x21,
@@ -452,46 +439,78 @@ fn mul128_fold64(lhs: u64, rhs: u64) u64 {
 }
 
 /// Portably reads a 32-bit little endian integer from p.
-fn read32(bytes: *const [4]u8) u32 {
-    return std.mem.readIntLittle(u32, bytes);
+fn read32(bytes: [*]const u8) u32 {
+    return std.mem.readIntLittle(u32, @ptrCast(*const [4]u8, bytes));
 }
 
 /// Portably reads a 64-bit little endian integer from p.
-fn read64(bytes: *const [8]u8) u64 {
-    return std.mem.readIntLittle(u64, bytes);
+fn read64(bytes: [*]const u8) u64 {
+    return std.mem.readIntLittle(u64, @ptrCast(*const [8]u8, bytes));
 }
 
 // Portably writes a 64-bit little endian integer to p.
-fn write_u64(bytes: *const [8]u8, val: u64) void {
-    std.mem.writeIntLittle(u64, bytes, val);
+fn write64(bytes: [*]u8, val: u64) void {
+    std.mem.writeIntLittle(u64, @ptrCast(*[8]u8, bytes), val);
 }
 
 /// 32-bit byteswap
 fn swap32(x: u32) u32 {
-    return @byteSwap(x);
+    return @byteSwap(u32, x);
 }
 
 /// 64-bit byteswap
 fn swap64(x: u64) u64 {
-    return @byteSwap(x);
+    return @byteSwap(u64, x);
 }
 
 fn rotl64(x: u64, amt: u32) u64 {
-    return std.math.rotl(x, amt);
-}
-
-// TODO: Only used for testing
-fn test_seeded_string(text: []const u8, seed: u64, expected: u64) !void {
-    const actual = xxh3_64bits_withSeed(text, seed);
-    try std.testing.assertEquals(expected, actual);
+    return std.math.rotl(u64, x, amt);
 }
 
 test "verify xxhash3" {
     const PRIME64 = 0x9e3779b185ebca8d;
-    
-
-    //  empty string
-    try test_seeded_string("", 0, 0x776EDDFB6BFD9195);
-    try test_seeded_string("", PRIME64, 0x6AFCE90814C488CB);
-
+    const TEST_SEEDS: [2]u64 = .{ 0, PRIME64 };
+    // test empty string
+    {
+        const expected_hashes: [2]u64 = .{ 0x776EDDFB6BFD9195, 0x6AFCE90814C488CB };
+        for (expected_hashes) |expected_hash, i| {
+            const actual_hash = xxh3_64bits_withSeed("", TEST_SEEDS[i]);
+            try std.testing.expectEqual(expected_hash, actual_hash);
+        }
+    }
+    // generate test data to match upstream C impl
+    //
+    // This is the same "test data" that has
+    const TEST_DATA_SIZE = 2243;
+    var test_data: [TEST_DATA_SIZE]u8 = undefined;
+    {
+        var byte_gen: u64 = PRIME32_1;
+        var i: usize = 0;
+        while (i < TEST_DATA_SIZE) {
+            test_data[i] = @truncate(u8, byte_gen >> 56);
+            byte_gen *%= PRIME64;
+            i += 1;
+        }
+    }
+    const test_expected = &[_][3]u64{
+        // 1 -  3
+        .{ 1, 0xB936EBAE24CB01C5, 0xF541B1905037FC39 },
+        // 4 -  8
+        .{ 6, 0x27B56A84CD2D7325, 0x84589C116AB59AB9 },
+    };
+    for (test_expected) |data| {
+        const len = @intCast(usize, data[0]);
+        const expected_hashes: [2]u64 = .{ data[1], data[2] };
+        const target_data = test_data[0..len];
+        try std.testing.expectEqual(expected_hashes.len, TEST_SEEDS.len);
+        for (TEST_SEEDS) |seed, i| {
+            const actual_hash = xxh3_64bits_withSeed(target_data, seed);
+            const expected_hash = expected_hashes[i];
+            if (actual_hash != expected_hash) {
+                std.debug.print("For seed={d} and len={}\n", .{ seed, len });
+                // std.debug.print("For test_data={X}\n", .{std.fmt.fmtSliceHexUpper(target_data)});
+            }
+            try std.testing.expectEqual(expected_hash, actual_hash);
+        }
+    }
 }
