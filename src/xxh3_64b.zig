@@ -512,6 +512,16 @@ test "verify xxhash3" {
         .{ 80, 0xBCDEFBBB2C47C90A, 0xC6DD0CB699532E73 },
         // 129-240
         .{ 195, 0xCD94217EE362EC3A, 0xBA68003D370CB3D9 },
+        // one block, last stripe is overlapping
+        .{ 403, 0x1B2AFF3B46C74648, 0xB654F6FFF42AD787 },
+        // one block, finishing at stripe boundary
+        .{ 512, 0x43E368661808A9E8, 0x3A865148E584E5B9 },
+        // 2 blocks, finishing at block boundary
+        .{ 2048, 0xC7169244BBDA8BD4, 0x74BF9A802BBDFBAE },
+        // 3 blocks, finishing at stripe boundary
+        .{ 2240, 0x30FEB637E114C0C7, 0xEEF78A36185EB61F },
+        // 3 blocks, last stripe is overlapping
+        .{ 2243, 0x62C631454648A193, 0x6CF80A4BADEA4428 },
     };
     for (test_expected) |data| {
         const len = @intCast(usize, data[0]);
