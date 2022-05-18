@@ -302,7 +302,7 @@ fn accumulate_64b(
 }
 
 /// Combines two accumulators with two keys
-fn mix2Accs(acc: *const [2]u8, secret: [*]const u8) u64 {
+fn mix2Accs(acc: *const [2]u64, secret: [*]const u8) u64 {
     return mul128_fold64(acc[0] ^ read64(secret), acc[1] ^ read64(secret + 8));
 }
 
@@ -312,12 +312,12 @@ fn mergeAccs(
     key: [*]const u8,
     start: u64,
 ) HashResult {
-    const acc = @ptrCast([*]const u8, raw_acc);
+    const acc = @ptrCast([*]const u64, raw_acc);
     var result64 = start;
     var i: usize = 0;
     while (i < 4) {
         result64 +%= mix2Accs(
-            @ptrCast(*const [2]u8, acc + (2 * i)),
+            @ptrCast(*const [2]u64, acc + (2 * i)),
             key + (16 * i),
         );
         i += 1;
