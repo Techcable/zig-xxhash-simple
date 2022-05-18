@@ -92,7 +92,7 @@ fn hash_len_1to3(
     acc +%= seed;
     acc ^= @as(u64, combined);
     acc *%= PRIME64_1;
-    return acc;
+    return avalanche(acc);
 }
 
 /// Hashes short keys from 4 to 8 bytes.
@@ -508,6 +508,7 @@ test "verify xxhash3" {
             const expected_hash = expected_hashes[i];
             if (actual_hash != expected_hash) {
                 std.debug.print("For seed={d} and len={}\n", .{ seed, len });
+                @breakpoint();
                 // std.debug.print("For test_data={X}\n", .{std.fmt.fmtSliceHexUpper(target_data)});
             }
             try std.testing.expectEqual(expected_hash, actual_hash);
