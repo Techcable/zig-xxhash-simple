@@ -15,5 +15,7 @@ test "comptime hash" {
     comptime {
         const text = "foo bar baz";
         _ = xxh3_64b.xxh3_64bits(text);
+        // test larger
+        _ = xxh3_64b.xxh3_64bits(text ** 20);
     }
 }
