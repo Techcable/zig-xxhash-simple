@@ -205,7 +205,7 @@ fn hash_len_129to240(
 ) HashResult {
     assert(input.len >= 129 and input.len <= 240);
     const MIDSIZE_STARTOFFSET = 3;
-    const MIDSIZE_LASTOFFSET = 7;
+    const MIDSIZE_LASTOFFSET = 17;
 
     var acc: u64 = @as(u64, input.len) *% PRIME64_1;
     const nbRounds: usize = input.len / 16;
