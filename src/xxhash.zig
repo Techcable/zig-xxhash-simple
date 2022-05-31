@@ -7,7 +7,7 @@ pub const HashVariant = enum {
     xxh3_64b,
 };
 
-test "force usgae" {
+test "force usage" {
     _ = xxh3_64b;
 }
 
