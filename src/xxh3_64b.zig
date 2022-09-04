@@ -462,12 +462,12 @@ fn write64(bytes: []u8, val: u64) void {
 
 /// 32-bit byteswap
 fn swap32(x: u32) u32 {
-    return @byteSwap(u32, x);
+    return @byteSwap(x);
 }
 
 /// 64-bit byteswap
 fn swap64(x: u64) u64 {
-    return @byteSwap(u64, x);
+    return @byteSwap(x);
 }
 
 fn rotl64(x: u64, amt: u32) u64 {

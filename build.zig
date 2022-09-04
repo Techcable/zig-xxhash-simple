@@ -17,5 +17,5 @@ pub fn build(b: *std.build.Builder) void {
 }
 
 fn setup_xxhash(step: *std.build.LibExeObjStep) void {
-    step.addPackage(.{ .name = "xxhash-simple", .path = std.build.FileSource{ .path = "./src/xxhash.zig" } });
+    step.addPackage(.{ .name = "xxhash-simple", .source = std.build.FileSource{ .path = "./src/xxhash.zig" } });
 }
